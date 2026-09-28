@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No network access at all: the page may only use inline code and local data URLs. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'none'; base-uri 'none'">
+<title>สร้างสำเนาเอกสาร — ประมวลผลในเครื่อง</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #fafafa;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --text: #18181b;
+    --muted: #71717a;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --ok: #15803d;
+    --radius: 14px;
+    --shadow-sm: 0 1px 2px rgba(24,24,27,.06), 0 1px 3px rgba(24,24,27,.04);
+    --shadow-lg: 0 10px 30px rgba(24,24,27,.10), 0 2px 8px rgba(24,24,27,.06);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Sarabun", "Noto Sans Thai", "Thonburi", -apple-system, "Helvetica Neue", sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* ---------- top bar ---------- */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 22px;
+    background: rgba(255,255,255,.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .badge {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: var(--ok);
+    font-size: 12.5px;
+    font-weight: 600;
+    border: 1px solid #bbf7d0;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+
+  /* ---------- layout ---------- */
+  main {
+    display: grid;
+    grid-template-columns: 392px minmax(0, 1fr);
+    gap: 22px;
+    padding: 22px;
+    align-items: start;
+  }
+  @media (max-width: 1040px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+  }
+  .panel + .panel { margin-top: 16px; }
+  .panel > h2 {
+    margin: 0;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  .panel .body { padding: 16px; }
+
+  /* ---------- form bits ---------- */
+  label.field { display: block; margin-bottom: 14px; }
+  label.field:last-child { margin-bottom: 0; }
+  .field > span.lab {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field .val { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+
+  input[type=text], textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: var(--surface-2);
+    font: inherit;
+    color: var(--text);
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  input[type=text]:focus, textarea:focus {
+    outline: none;
+    background: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { resize: vertical; min-height: 68px; line-height: 1.6; }
+
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 20px; }
+
+  .switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .switch input {
+    appearance: none; margin: 0; width: 38px; height: 22px; border-radius: 999px;
+    background: var(--line-strong); position: relative; cursor: pointer;
+    transition: background .18s; flex: none;
+  }
+  .switch input::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); transition: transform .18s;
+  }
+  .switch input:checked { background: var(--accent); }
+  .switch input:checked::after { transform: translateX(16px); }
+  .switch span { font-size: 13.5px; font-weight: 500; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+  .chip {
+    padding: 6px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- dropzone ---------- */
+  #drop {
+    border: 1.5px dashed var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 26px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .16s;
+  }
+  #drop:hover, #drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  #drop .big { font-weight: 600; font-size: 14px; }
+  #drop .small { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  #thumbWrap { display: none; align-items: center; gap: 12px; text-align: left; }
+  #thumbWrap img { width: 96px; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  #thumbWrap .meta { font-size: 12.5px; color: var(--muted); line-height: 1.5; min-width: 0; }
+  #thumbWrap .meta b { color: var(--text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    appearance: none;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+  .btn.primary:hover:not(:disabled) { background: #4338ca; border-color: #4338ca; color: #fff; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 8px; }
+  .btn.ghost:hover { color: #b91c1c; border-color: transparent; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* ---------- preview ---------- */
+  .stage {
+    position: sticky;
+    top: 78px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 18px;
+  }
+  .stage .head {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12.5px; color: var(--muted); margin-bottom: 14px;
+  }
+  .paper {
+    display: block;
+    width: 100%;
+    max-width: 620px;
+    margin: 0 auto;
+    background: #fff;
+    box-shadow: var(--shadow-lg);
+    border-radius: 3px;
+  }
+  .empty {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 210 / 297;
+    max-width: 620px;
+    margin: 0 auto;
+    color: var(--muted);
+    border: 1.5px dashed var(--line-strong);
+    border-radius: 8px;
+    text-align: center;
+    padding: 20px;
+  }
+  .note {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  kbd {
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+    font-size: 11.5px; font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>สร้างสำเนาเอกสารพร้อมข้อความคาด</h1>
+    <div class="sub">วางรูป → พิมพ์วัตถุประสงค์ → ดาวน์โหลด PDF / PNG / JPEG</div>
+  </div>
+  <div class="badge"><span class="dot"></span> ประมวลผลในเครื่อง 100% ไม่มีการอัปโหลด</div>
+</header>
+
+<main>
+  <!-- ================= controls ================= -->
+  <div>
+    <section class="panel">
+      <h2>1 · รูปเอกสาร</h2>
+      <div class="body">
+        <div id="drop">
+          <div id="dropIdle">
+            <div class="big">ลากรูปมาวาง หรือคลิกเพื่อเลือก</div>
+            <div class="small">รองรับ PNG / JPG / WebP — หรือกด <kbd>Ctrl</kbd>+<kbd>V</kbd> วางจากคลิปบอร์ด</div>
+          </div>
+          <div id="thumbWrap">
+            <img id="thumb" alt="ตัวอย่างรูปที่เลือก">
+            <div class="meta">
+              <b id="fileName"></b>
+              <span id="fileInfo"></span>
+              <div><button class="btn ghost" id="clearImg" type="button">ลบรูป</button></div>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="file" accept="image/*" hidden>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>2 · ข้อความ</h2>
+      <div class="body">
+        <label class="field">
+          <span class="lab">หัวเรื่อง</span>
+          <input type="text" id="title" placeholder="สำเนาบัตรประจำตัวประชาชน">
+        </label>
+
+        <label class="field">
+          <span class="lab">ข้อความคาดบนรูป <span class="val" id="lineCount"></span></span>
+          <div class="chips" id="presets"></div>
+          <textarea id="sash" rows="3" placeholder="ใช้เพื่อ ......... เท่านั้น"></textarea>
+        </label>
+
+        <label class="switch">
+          <input type="checkbox" id="showSign">
+          <span>ใส่บล็อก “สำเนาถูกต้อง / ลงชื่อ / วันที่” ใต้รูป</span>
+        </label>
+        <label class="field" id="nameField" style="display:none">
+          <span class="lab">ชื่อ-สกุล ในวงเล็บ</span>
+          <input type="text" id="signName" placeholder="นาย สมชาย ใจดี">
+        </label>
+
+        <label class="switch">
+          <input type="checkbox" id="showFooter" checked>
+          <span>ใส่หมายเหตุท้ายหน้า</span>
+        </label>
+        <label class="field" id="footerField">
+          <span class="lab">ข้อความหมายเหตุ</span>
+          <textarea id="footer" rows="3"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3 · รูปแบบแถบคาด</h2>
+      <div class="body">
+        <label class="field">
+          <span class="lab">มุมเอียง <span class="val" id="angleVal"></span></span>
+          <input type="range" id="angle" min="-45" max="45" step="1">
+        </label>
+        <label class="field">
+          <span class="lab">ความทึบพื้นแถบ <span class="val" id="opacityVal"></span></span>
+          <input type="range" id="opacity" min="0" max="100" step="5">
+        </label>
+        <label class="field">
+          <span class="lab">ขนาดตัวอักษร <span class="val" id="fontVal"></span></span>
+          <input type="range" id="fontSize" min="6" max="18" step="0.5">
+        </label>
+        <label class="field">
+          <span class="lab">ตำแหน่งแถบ (วัดจากขอบบนของรูป) <span class="val" id="posVal"></span></span>
+          <input type="range" id="bandPos" min="10" max="90" step="1">
+        </label>
+        <label class="field">
+          <span class="lab">ความกว้างรูปบนกระดาษ <span class="val" id="widthVal"></span></span>
+          <input type="range" id="cardWidth" min="80" max="174" step="2">
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="showRules" checked>
+          <span>เส้นคาดบน–ล่าง</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>4 · ส่งออก</h2>
+      <div class="body">
+        <div class="actions">
+          <button class="btn primary" id="dlPdf" type="button">ดาวน์โหลด PDF</button>
+          <button class="btn" id="dlPng" type="button">PNG</button>
+          <button class="btn" id="dlJpg" type="button">JPEG</button>
+          <button class="btn" id="doPrint" type="button">สั่งพิมพ์</button>
+        </div>
+        <div class="note" style="margin-top:14px">
+          ไฟล์ทั้งหมดสร้างในเบราว์เซอร์ด้วย canvas ความละเอียด 300 DPI
+          ไม่มีการส่งข้อมูลออกนอกเครื่อง — หน้านี้ตั้ง CSP บล็อกการเชื่อมต่อเครือข่ายไว้แล้ว
+          <div style="margin-top:8px"><button class="btn ghost" id="reset" type="button">รีเซ็ตค่าทั้งหมด</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= preview ================= -->
+  <div class="stage">
+    <div class="head">
+      <strong style="color:var(--text)">ตัวอย่าง</strong> · A4 แนวตั้ง 210 × 297 มม.
+      <span style="margin-left:auto" id="status"></span>
+    </div>
+    <canvas class="paper" id="preview" style="display:none"></canvas>
+    <div class="empty" id="emptyState">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">ยังไม่มีรูป</div>
+        <div style="margin-top:6px">วางรูปเอกสารในช่องด้านซ้ายเพื่อเริ่ม</div>
+      </div>
+    </div>
+    <div class="note">
+      พื้นที่ว่างใต้รูปเว้นไว้สำหรับเขียน “สำเนาถูกต้อง” ลายเซ็น และวันที่ด้วยลายมือ
+      ต้องการบล็อกสำเร็จรูปให้เปิดสวิตช์ในหัวข้อ 2
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- page geometry ----------
+  const MM = { W: 210, H: 297 };            // A4 portrait
+  const MARGIN = { x: 18, top: 18, bottom: 16 };
+  const PT_TO_MM = 25.4 / 72;
+  const FONT = '"Sarabun","Noto Sans Thai","Thonburi",-apple-system,sans-serif';
+  const STORE_KEY = 'idcopy.settings.v1';   // layout settings only — never the image, never the name
+
+  const DEFAULTS = {
+    title: 'สำเนาบัตรประจำตัวประชาชน',
+    sash: 'ใช้เพื่อ ................................................ เท่านั้น',
+    signName: '',
+    footer: 'เอกสารฉบับนี้เป็นสำเนา ใช้ได้เฉพาะวัตถุประสงค์ที่ระบุไว้เท่านั้น ห้ามนำไปทำซ้ำ เผยแพร่ หรือใช้เพื่อวัตถุประสงค์อื่น ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)',
+    angle: -19,
+    opacity: 30,
+    fontSize: 9,
+    bandPos: 50,
+    cardWidth: 140,
+    showRules: true,
+    showSign: false,
+    showFooter: true
+  };
+
+  const PRESETS = [
+    ['ลาออก + โอนหุ้น', 'ใช้เพื่อประกอบการลาออกจากทุกตำแหน่ง และการโอนหุ้นทั้งหมด\nในบริษัท .......................... จำกัด เลขทะเบียนนิติบุคคล .................... เท่านั้น'],
+    ['สมัครงาน', 'ใช้เพื่อประกอบการสมัครงานกับ\nบริษัท .......................................... จำกัด เท่านั้น'],
+    ['ธุรกรรมธนาคาร', 'ใช้เพื่อประกอบการทำธุรกรรมกับ\nธนาคาร .......................................... เท่านั้น'],
+    ['ติดต่อราชการ', 'ใช้เพื่อประกอบการติดต่อ\n.......................................... เท่านั้น'],
+    ['ล้างข้อความ', 'ใช้เพื่อ ................................................ เท่านั้น']
+  ];
+
+  // ---------- state ----------
+  const S = Object.assign({}, DEFAULTS);
+  let img = null;
+  let imgMeta = '';
+
+  const el = {};
+  ['drop','dropIdle','thumbWrap','thumb','fileName','fileInfo','clearImg','file',
+   'title','sash','presets','lineCount','showSign','nameField','signName',
+   'showFooter','footerField','footer','angle','angleVal','opacity','opacityVal',
+   'fontSize','fontVal','bandPos','posVal','cardWidth','widthVal','showRules',
+   'dlPdf','dlPng','dlJpg','doPrint','reset','preview','emptyState','status']
+    .forEach(id => el[id] = document.getElementById(id));
+
+  // =====================================================================
+  //  drawing — one routine renders at any DPI: preview and export alike
+  // =====================================================================
+  function draw(ctx, dpi) {
+    const k = dpi / 25.4;                 // millimetres -> pixels
+    const mm = v => v * k;
+    const pt = v => v * PT_TO_MM * k;     // points -> pixels
+
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, mm(MM.W), mm(MM.H));
+    ctx.textBaseline = 'alphabetic';
+
+    // --- title ---
+    let cursorY = mm(MARGIN.top);
+    const title = S.title.trim();
+    if (title) {
+      ctx.font = '700 ' + pt(15) + 'px ' + FONT;
+      ctx.fillStyle = '#111';
+      ctx.textAlign = 'center';
+      cursorY += pt(15);
+      ctx.fillText(title, mm(MM.W / 2), cursorY);
+      cursorY += mm(10);
+    }
+
+    // --- document image + sash ---
+    if (img && img.naturalWidth) {
+      const cardW = mm(S.cardWidth);
+      const cardH = cardW * (img.naturalHeight / img.naturalWidth);
+      const cardX = (mm(MM.W) - cardW) / 2;
+      const cardY = cursorY;
+
+      ctx.drawImage(img, cardX, cardY, cardW, cardH);
+      ctx.strokeStyle = '#999';
+      ctx.lineWidth = Math.max(1, pt(0.6));
+      ctx.strokeRect(cardX, cardY, cardW, cardH);
+
+      drawSash(ctx, k, pt, cardX, cardY, cardW, cardH);
+      cursorY = cardY + cardH;
+    }
+
+    // --- optional certification block under the image ---
+    if (S.showSign) {
+      const right = mm(MM.W - MARGIN.x);
+      let y = cursorY + mm(14);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#111';
+
+      ctx.font = '700 ' + pt(13.5) + 'px ' + FONT;
+      ctx.fillText('สำเนาถูกต้อง', right - mm(26), y);
+
+      ctx.font = pt(12.5) + 'px ' + FONT;
+      y += mm(9);
+      ctx.fillText('ลงชื่อ ......................................................... ผู้รับรองสำเนา', right, y);
+
+      y += mm(8);
+      const nm = S.signName.trim();
+      ctx.fillText(nm ? '( ' + nm.replace(/^\(\s*|\s*\)$/g, '') + ' )'
+                      : '( ........................................... )', right - mm(26), y);
+
+      y += mm(8);
+      ctx.fillText('วันที่ ............ / ............ / ..............', right - mm(8), y);
+    }
+
+    // --- footer note ---
+    if (S.showFooter && S.footer.trim()) {
+      const fx = mm(MARGIN.x), fw = mm(MM.W - MARGIN.x * 2);
+      ctx.font = pt(8.5) + 'px ' + FONT;
+      ctx.textAlign = 'left';
+      const lines = wrap(ctx, S.footer.trim(), fw);
+      const lh = pt(8.5) * 1.5;
+      let fy = mm(MM.H - MARGIN.bottom) - lines.length * lh;
+
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = Math.max(1, pt(0.5));
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - mm(2.5));
+      ctx.lineTo(fx + fw, fy - mm(2.5));
+      ctx.stroke();
+
+      ctx.fillStyle = '#555';
+      lines.forEach(line => { fy += lh; ctx.fillText(line, fx, fy); });
+    }
+
+    ctx.restore();
+  }
+
+  // diagonal band, clipped to the image so it never spills onto the page
+  function drawSash(ctx, k, pt, cardX, cardY, cardW, cardH) {
+    const text = S.sash.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!text.length) return;
+
+    const fs = pt(S.fontSize);
+    const lh = fs * 1.6;
+    const pad = 2.5 * k;                   // 2.5 mm breathing room above and below
+    const bandH = text.length * lh + pad * 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cardX, cardY, cardW, cardH);
+    ctx.clip();
+
+    ctx.translate(cardX + cardW / 2, cardY + cardH * (S.bandPos / 100));
+    ctx.rotate(S.angle * Math.PI / 180);
+
+    const half = cardW * 1.1;              // long enough to run past both edges
+
+    if (S.opacity > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + (S.opacity / 100) + ')';
+      ctx.fillRect(-half, -bandH / 2, half * 2, bandH);
+    }
+    if (S.showRules) {
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = Math.max(1, pt(1.2));
+      ctx.beginPath();
+      ctx.moveTo(-half, -bandH / 2); ctx.lineTo(half, -bandH / 2);
+      ctx.moveTo(-half,  bandH / 2); ctx.lineTo(half,  bandH / 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#000';
+    ctx.font = '700 ' + fs + 'px ' + FONT;
+    ctx.textAlign = 'center';
+    let ty = -bandH / 2 + pad + fs * 0.95;
+    text.forEach(line => { ctx.fillText(line, 0, ty); ty += lh; });
+
+    ctx.restore();
+  }
+
+  function wrap(ctx, text, maxW) {
+    const out = [];
+    text.split('\n').forEach(para => {
+      let line = '';
+      para.split(' ').forEach(word => {
+        const test = line ? line + ' ' + word : word;
+        if (ctx.measureText(test).width > maxW && line) { out.push(line); line = word; }
+        else line = test;
+      });
+      out.push(line);
+    });
+    return out;
+  }
+
+  function render(dpi) {
+    const c = document.createElement('canvas');
+    c.width = Math.round(MM.W / 25.4 * dpi);
+    c.height = Math.round(MM.H / 25.4 * dpi);
+    draw(c.getContext('2d'), dpi);
+    return c;
+  }
+
+  function refresh() {
+    const dpi = 150;
+    const c = el.preview;
+    c.width = Math.round(MM.W / 25.4 * dpi);
+    c.height = Math.round(MM.H / 25.4 * dpi);
+    draw(c.getContext('2d'), dpi);
+
+    c.style.display = img ? 'block' : 'none';
+    el.emptyState.style.display = img ? 'none' : 'grid';
+    el.status.textContent = img ? imgMeta : '';
+    el.lineCount.textContent = S.sash.split('\n').filter(s => s.trim()).length + ' บรรทัด';
+    ['dlPdf','dlPng','dlJpg','doPrint'].forEach(id => el[id].disabled = !img);
+  }
+
+  // =====================================================================
+  //  export — the PDF is assembled by hand, no library, nothing uploaded
+  // =====================================================================
+  function dataUrlToBytes(url) {
+    const bin = atob(url.split(',')[1]);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function buildPdf(jpeg, pxW, pxH) {
+    const enc = new TextEncoder();
+    const chunks = [];
+    const offs = [];
+    let len = 0;
+    const push = d => { const b = typeof d === 'string' ? enc.encode(d) : d; chunks.push(b); len += b.length; };
+    const obj = (n, body) => { offs[n] = len; push(n + ' 0 obj\n' + body + '\nendobj\n'); };
+
+    const W = (MM.W / 25.4 * 72).toFixed(2);   // 595.28 pt
+    const H = (MM.H / 25.4 * 72).toFixed(2);   // 841.89 pt
+    const content = 'q ' + W + ' 0 0 ' + H + ' 0 0 cm /Im0 Do Q';
+
+    push('%PDF-1.4\n');
+    obj(1, '<</Type/Catalog/Pages 2 0 R>>');
+    obj(2, '<</Type/Pages/Kids[3 0 R]/Count 1>>');
+    obj(3, '<</Type/Page/Parent 2 0 R/MediaBox[0 0 ' + W + ' ' + H +
+           ']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>');
+
+    offs[4] = len;
+    push('4 0 obj\n<</Type/XObject/Subtype/Image/Width ' + pxW + '/Height ' + pxH +
+         '/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ' + jpeg.length + '>>\nstream\n');
+    push(jpeg);
+    push('\nendstream\nendobj\n');
+
+    obj(5, '<</Length ' + content.length + '>>\nstream\n' + content + '\nendstream');
+
+    const xrefAt = len;
+    let xref = 'xref\n0 6\n0000000000 65535 f \n';
+    for (let i = 1; i <= 5; i++) xref += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+    push(xref);
+    push('trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n' + xrefAt + '\n%%EOF\n');
+
+    return new Blob(chunks, { type: 'application/pdf' });
+  }
+
+  function stamp() {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+
+  function saveBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  el.dlPdf.onclick = () => {
+    const c = render(300);
+    const jpeg = dataUrlToBytes(c.toDataURL('image/jpeg', 0.92));
+    saveBlob(buildPdf(jpeg, c.width, c.height), 'copy-' + stamp() + '.pdf');
+  };
+  el.dlPng.onclick = () => render(300).toBlob(b => saveBlob(b, 'copy-' + stamp() + '.png'), 'image/png');
+  el.dlJpg.onclick = () => render(300).toBlob(b => saveBlob(b, 'copy-' + stamp() + '.jpg'), 'image/jpeg', 0.92);
+
+  el.doPrint.onclick = () => {
+    const url = render(300).toDataURL('image/jpeg', 0.92);
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); };
+    f.onload = go;
+    document.body.appendChild(f);
+    const d = f.contentDocument;
+    d.open();
+    d.write('<!DOCTYPE html><meta charset="utf-8"><style>@page{size:A4;margin:0}' +
+            'html,body{margin:0;padding:0}img{width:100%;display:block}</style>' +
+            '<img src="' + url + '">');
+    d.close();
+  };
+
+  // =====================================================================
+  //  image intake — drag & drop, click, paste
+  // =====================================================================
+  function loadFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const im = new Image();
+      im.onload = () => {
+        img = im;
+        imgMeta = im.naturalWidth + ' × ' + im.naturalHeight + ' px';
+        el.thumb.src = e.target.result;
+        el.fileName.textContent = file.name || 'จากคลิปบอร์ด';
+        el.fileInfo.textContent = imgMeta + ' · ' + (file.size / 1048576).toFixed(1) + ' MB';
+        el.dropIdle.style.display = 'none';
+        el.thumbWrap.style.display = 'flex';
+        refresh();
+      };
+      im.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  el.drop.onclick = e => { if (e.target.closest('#clearImg')) return; el.file.click(); };
+  el.file.onchange = e => loadFile(e.target.files[0]);
+  el.drop.addEventListener('dragover', e => { e.preventDefault(); el.drop.classList.add('over'); });
+  el.drop.addEventListener('dragleave', () => el.drop.classList.remove('over'));
+  el.drop.addEventListener('drop', e => {
+    e.preventDefault();
+    el.drop.classList.remove('over');
+    loadFile(e.dataTransfer.files[0]);
+  });
+  document.addEventListener('paste', e => {
+    const items = e.clipboardData ? Array.from(e.clipboardData.items) : [];
+    const hit = items.find(i => i.type.startsWith('image/'));
+    if (hit) loadFile(hit.getAsFile());
+  });
+  el.clearImg.onclick = e => {
+    e.stopPropagation();
+    img = null;
+    el.file.value = '';
+    el.dropIdle.style.display = '';
+    el.thumbWrap.style.display = 'none';
+    refresh();
+  };
+
+  // =====================================================================
+  //  settings binding + persistence (layout only, no personal data)
+  // =====================================================================
+  const TEXTS = ['title', 'sash', 'signName', 'footer'];
+  const RANGES = {
+    angle: ['angleVal', v => v + '°'],
+    opacity: ['opacityVal', v => v + '%'],
+    fontSize: ['fontVal', v => v + ' pt'],
+    bandPos: ['posVal', v => v + '%'],
+    cardWidth: ['widthVal', v => v + ' มม.']
+  };
+  const SWITCHES = ['showRules', 'showSign', 'showFooter'];
+
+  function applyToUI() {
+    TEXTS.forEach(k => el[k].value = S[k]);
+    for (const k in RANGES) { el[k].value = S[k]; el[RANGES[k][0]].textContent = RANGES[k][1](S[k]); }
+    SWITCHES.forEach(k => el[k].checked = S[k]);
+    el.nameField.style.display = S.showSign ? '' : 'none';
+    el.footerField.style.display = S.showFooter ? '' : 'none';
+  }
+
+  function persist() {
+    const keep = {};
+    for (const k in DEFAULTS) if (k !== 'signName') keep[k] = S[k];
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(keep)); } catch (_) {}
+  }
+
+  TEXTS.forEach(k => el[k].addEventListener('input', () => { S[k] = el[k].value; persist(); refresh(); }));
+  for (const k in RANGES) el[k].addEventListener('input', () => {
+    S[k] = parseFloat(el[k].value);
+    el[RANGES[k][0]].textContent = RANGES[k][1](S[k]);
+    persist(); refresh();
+  });
+  SWITCHES.forEach(k => el[k].addEventListener('change', () => {
+    S[k] = el[k].checked;
+    if (k === 'showSign') el.nameField.style.display = S.showSign ? '' : 'none';
+    if (k === 'showFooter') el.footerField.style.display = S.showFooter ? '' : 'none';
+    persist(); refresh();
+  }));
+
+  PRESETS.forEach(pair => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = pair[0];
+    b.onclick = () => { S.sash = pair[1]; el.sash.value = pair[1]; persist(); refresh(); };
+    el.presets.appendChild(b);
+  });
+
+  el.reset.onclick = () => {
+    Object.assign(S, DEFAULTS);
+    try { localStorage.removeItem(STORE_KEY); } catch (_) {}
+    applyToUI();
+    refresh();
+  };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    for (const k in DEFAULTS) if (k in saved) S[k] = saved[k];
+  } catch (_) {}
+
+  applyToUI();
+  refresh();
+})();
+</script>
+</body>
+</html>
